@@ -61,17 +61,12 @@ git clone https://github.com/yourusername/wifi-hotspot-manager.git
 cd wifi-hotspot-manager
 ```
 
-2. **Check system compatibility (recommended):**
-```bash
-./check_system.sh
-```
-
-3. **Install system dependencies:**
+2. **Install system dependencies:**
 ```bash
 ./install.sh
 ```
 
-4. **Install the application:**
+3. **Install the application:**
 ```bash
 ./setup.sh
 ```
