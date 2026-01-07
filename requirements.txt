@@ -1,0 +1,6 @@
+PyGObject>=3.42.0
+# GTK4 and libadwaita are system dependencies
+# Install via:
+# sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 (Debian/Ubuntu)
+# sudo dnf install python3-gobject gtk4 libadwaita (Fedora)
+# sudo pacman -S python-gobject gtk4 libadwaita (Arch)
