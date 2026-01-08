@@ -235,7 +235,10 @@ class HotspotControlPage(Gtk.Box):
         pass_box.append(self.password_entry)
         
         self.password_toggle = Gtk.ToggleButton()
-        self.password_toggle.set_icon_name("view-reveal-symbolic")
+        # Create icon for the toggle button
+        self.password_icon = Gtk.Image.new_from_icon_name("view-reveal-symbolic")
+        self.password_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        self.password_toggle.set_child(self.password_icon)
         self.password_toggle.set_tooltip_text("Show/Hide Password")
         self.password_toggle.connect("toggled", self._on_password_toggle)
         pass_box.append(self.password_toggle)
@@ -315,9 +318,9 @@ class HotspotControlPage(Gtk.Box):
         visible = button.get_active()
         self.password_entry.set_visibility(visible)
         if visible:
-            button.set_icon_name("view-conceal-symbolic")
+            self.password_icon.set_from_icon_name("view-conceal-symbolic")
         else:
-            button.set_icon_name("view-reveal-symbolic")
+            self.password_icon.set_from_icon_name("view-reveal-symbolic")
     
     def _on_switch_toggled(self, switch: Gtk.Switch, state: bool) -> bool:
         if self.updating:

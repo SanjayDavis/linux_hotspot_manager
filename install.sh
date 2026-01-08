@@ -79,10 +79,16 @@ chmod +x main.py
 # Install desktop entry
 echo "Installing desktop entry..."
 INSTALL_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
 mkdir -p "$INSTALL_DIR"
+mkdir -p "$ICON_DIR"
 
 # Get the absolute path to the installation directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Copy icon to standard location
+echo "Installing application icon..."
+cp "$SCRIPT_DIR/icon.png" "$ICON_DIR/wifi-hotspot-manager.png"
 
 # Create desktop file with absolute path
 cat > "$INSTALL_DIR/wifi-hotspot-manager.desktop" << EOF
@@ -90,7 +96,7 @@ cat > "$INSTALL_DIR/wifi-hotspot-manager.desktop" << EOF
 Name=WiFi Hotspot Manager
 Comment=Manage WiFi hotspot on RTL8852BE chipsets
 Exec=$SCRIPT_DIR/main.py
-Icon=network-wireless
+Icon=wifi-hotspot-manager
 Terminal=false
 Type=Application
 Categories=Network;System;
@@ -100,6 +106,11 @@ EOF
 
 # Make desktop file executable
 chmod +x "$INSTALL_DIR/wifi-hotspot-manager.desktop"
+
+# Update icon cache
+if command -v gtk-update-icon-cache &> /dev/null; then
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+fi
 
 # Update desktop database
 if command -v update-desktop-database &> /dev/null; then
