@@ -76,12 +76,45 @@ echo
 echo "Making main.py executable..."
 chmod +x main.py
 
+# Install desktop entry
+echo "Installing desktop entry..."
+INSTALL_DIR="$HOME/.local/share/applications"
+mkdir -p "$INSTALL_DIR"
+
+# Get the absolute path to the installation directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Create desktop file with absolute path
+cat > "$INSTALL_DIR/wifi-hotspot-manager.desktop" << EOF
+[Desktop Entry]
+Name=WiFi Hotspot Manager
+Comment=Manage WiFi hotspot on RTL8852BE chipsets
+Exec=$SCRIPT_DIR/main.py
+Icon=network-wireless
+Terminal=false
+Type=Application
+Categories=Network;System;
+Keywords=wifi;hotspot;network;wireless;
+StartupNotify=true
+EOF
+
+# Make desktop file executable
+chmod +x "$INSTALL_DIR/wifi-hotspot-manager.desktop"
+
+# Update desktop database
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database "$INSTALL_DIR" 2>/dev/null || true
+fi
+
+echo "Desktop entry installed successfully"
+echo
+
 echo
 echo "Installation complete!"
 echo
 echo "Next steps:"
 echo "  1. Reboot your system to ensure firmware is loaded"
-echo "  2. Run the application: ./main.py"
+echo "  2. Run the application from your application menu or: ./main.py"
 echo
 echo "For hotspot management without sudo, add your user to the netdev group:"
 echo "   sudo usermod -a -G netdev \$USER"
