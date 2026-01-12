@@ -8,6 +8,9 @@ gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw, GLib
 from typing import Callable, Optional
+import subprocess
+import os
+import signal
 from diagnostics import SystemDiagnostics, DriverStatus, APCapabilities
 from network_control import NetworkControl, HotspotStatus
 
@@ -144,6 +147,8 @@ class HotspotControlPage(Gtk.Box):
         
         self.on_toast = on_toast
         self.updating = False
+        self.inhibitor_pid = None
+        self.persistence_enabled = True
         
         title = Gtk.Label(label="Hotspot Control")
         title.add_css_class("title-2")
@@ -152,6 +157,9 @@ class HotspotControlPage(Gtk.Box):
         
         self.status_card = self._create_status_card()
         self.append(self.status_card)
+        
+        self.persistence_card = self._create_persistence_card()
+        self.append(self.persistence_card)
         
         control_card = self._create_control_card()
         self.append(control_card)
@@ -179,6 +187,51 @@ class HotspotControlPage(Gtk.Box):
         self.status_label.set_wrap(True)
         self.status_label.set_xalign(0)
         box.append(self.status_label)
+        
+        frame.set_child(box)
+        return frame
+    
+    def _create_persistence_card(self) -> Gtk.Frame:
+        frame = Gtk.Frame()
+        frame.set_margin_top(6)
+        frame.set_margin_bottom(6)
+        
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        
+        title_label = Gtk.Label(label="Lock Screen Persistence")
+        title_label.add_css_class("title-4")
+        title_label.set_halign(Gtk.Align.START)
+        box.append(title_label)
+        
+        # Persistence toggle
+        persistence_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        persistence_box.set_halign(Gtk.Align.FILL)
+        
+        persistence_label = Gtk.Label(label="Keep hotspot active during screen lock")
+        persistence_label.set_hexpand(True)
+        persistence_label.set_halign(Gtk.Align.START)
+        persistence_box.append(persistence_label)
+        
+        self.persistence_switch = Gtk.Switch()
+        self.persistence_switch.set_active(True)
+        self.persistence_switch.set_valign(Gtk.Align.CENTER)
+        self.persistence_switch.connect("state-set", self._on_persistence_toggled)
+        persistence_box.append(self.persistence_switch)
+        
+        box.append(persistence_box)
+        
+        # Status label
+        self.persistence_status_label = Gtk.Label(label="Persistence enabled - hotspot will stay active when screen is locked")
+        self.persistence_status_label.set_halign(Gtk.Align.START)
+        self.persistence_status_label.set_wrap(True)
+        self.persistence_status_label.set_xalign(0)
+        self.persistence_status_label.add_css_class("dim-label")
+        self.persistence_status_label.add_css_class("caption")
+        box.append(self.persistence_status_label)
         
         frame.set_child(box)
         return frame
@@ -294,6 +347,13 @@ class HotspotControlPage(Gtk.Box):
             self.password_entry.set_sensitive(False)
             self.password_toggle.set_sensitive(status.password is not None)
             self.band_dropdown.set_sensitive(False)
+            
+            # Manage sleep inhibitor
+            if self.persistence_enabled and self.inhibitor_pid is None:
+                self._start_sleep_inhibitor()
+            
+            # Update persistence status
+            self._update_persistence_status(True)
         else:
             text = "Hotspot Inactive"
             
@@ -310,6 +370,13 @@ class HotspotControlPage(Gtk.Box):
                 self.ssid_entry.set_text("")
             if self.password_entry.get_text() == "********":
                 self.password_entry.set_text("")
+            
+            # Stop sleep inhibitor when hotspot is off
+            if self.inhibitor_pid is not None:
+                self._stop_sleep_inhibitor()
+            
+            # Update persistence status
+            self._update_persistence_status(False)
         
         self.status_label.set_text(text)
         return False
@@ -321,6 +388,83 @@ class HotspotControlPage(Gtk.Box):
             self.password_icon.set_from_icon_name("view-conceal-symbolic")
         else:
             self.password_icon.set_from_icon_name("view-reveal-symbolic")
+    
+    def _on_persistence_toggled(self, switch: Gtk.Switch, state: bool) -> bool:
+        self.persistence_enabled = state
+        
+        status = NetworkControl.get_hotspot_status()
+        
+        if state and status.active:
+            # Enable persistence - start inhibitor
+            if self.inhibitor_pid is None:
+                self._start_sleep_inhibitor()
+            self.on_toast("Lock screen persistence enabled")
+        elif not state and self.inhibitor_pid is not None:
+            # Disable persistence - stop inhibitor
+            self._stop_sleep_inhibitor()
+            self.on_toast("Lock screen persistence disabled")
+        
+        self._update_persistence_status(status.active)
+        return False
+    
+    def _start_sleep_inhibitor(self):
+        """Start systemd-inhibit to prevent sleep while hotspot is active"""
+        try:
+            # Check if systemd-inhibit is available
+            if subprocess.run(['which', 'systemd-inhibit'], 
+                            capture_output=True).returncode != 0:
+                return
+            
+            # Start the inhibitor
+            proc = subprocess.Popen(
+                ['systemd-inhibit', 
+                 '--what=sleep:idle',
+                 '--who=WiFi Hotspot Manager',
+                 '--why=Hotspot is active',
+                 '--mode=block',
+                 'sleep', 'infinity'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            self.inhibitor_pid = proc.pid
+            
+        except Exception:
+            pass
+    
+    def _stop_sleep_inhibitor(self):
+        """Stop the sleep inhibitor"""
+        if self.inhibitor_pid is not None:
+            try:
+                os.kill(self.inhibitor_pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except Exception:
+                pass
+            finally:
+                self.inhibitor_pid = None
+    
+    def _update_persistence_status(self, hotspot_active: bool):
+        """Update the persistence status label"""
+        if self.persistence_enabled:
+            if hotspot_active:
+                if self.inhibitor_pid is not None:
+                    status_text = "Active - System sleep blocked while hotspot is running"
+                    self.persistence_status_label.remove_css_class("dim-label")
+                    self.persistence_status_label.add_css_class("success")
+                else:
+                    status_text = "Enabled but inhibitor not running (systemd-inhibit may not be available)"
+                    self.persistence_status_label.remove_css_class("success")
+                    self.persistence_status_label.add_css_class("dim-label")
+            else:
+                status_text = "Enabled - Will activate when hotspot is turned on"
+                self.persistence_status_label.remove_css_class("success")
+                self.persistence_status_label.add_css_class("dim-label")
+        else:
+            status_text = "Disabled - Hotspot may disconnect when screen is locked"
+            self.persistence_status_label.remove_css_class("success")
+            self.persistence_status_label.add_css_class("dim-label")
+        
+        self.persistence_status_label.set_text(status_text)
     
     def _on_switch_toggled(self, switch: Gtk.Switch, state: bool) -> bool:
         if self.updating:

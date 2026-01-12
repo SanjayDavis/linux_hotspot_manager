@@ -31,5 +31,19 @@ if command -v update-desktop-database &> /dev/null; then
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 fi
 
+# Stop and remove hotspot keep-alive service
+echo "Removing hotspot keep-alive service..."
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+if [ -f "$SYSTEMD_USER_DIR/hotspot-keepalive.service" ]; then
+    systemctl --user stop hotspot-keepalive.service 2>/dev/null || true
+    systemctl --user disable hotspot-keepalive.service 2>/dev/null || true
+    rm -f "$SYSTEMD_USER_DIR/hotspot-keepalive.service"
+    systemctl --user daemon-reload
+    echo "Removed hotspot keep-alive service"
+fi
+
+# Clean up lock files
+rm -f /tmp/hotspot-inhibit.lock /tmp/hotspot-inhibit.pid 2>/dev/null || true
+
 echo
 echo "WiFi Hotspot Manager has been uninstalled."

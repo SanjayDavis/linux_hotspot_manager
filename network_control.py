@@ -159,6 +159,12 @@ class NetworkControl:
             password_match = re.search(r'password:\s+(\S+)', output)
             generated_password = password_match.group(1) if password_match else None
             
+            # Configure the hotspot connection to stay active during screen lock/suspend
+            success, conn_name = NetworkControl._configure_persistent_hotspot(interface)
+            if not success:
+                # Log warning but don't fail - hotspot is still active
+                pass
+            
             if generated_password:
                 return True, f"Hotspot enabled. Password: {generated_password}"
             
@@ -219,6 +225,78 @@ class NetworkControl:
         except Exception as e:
             return False, f"Unexpected error: {str(e)}"
 
+    @staticmethod
+    def _configure_persistent_hotspot(interface: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        """
+        Configure the hotspot connection to remain active during screen lock and sleep.
+        """
+        try:
+            # Find the active hotspot connection name
+            result = subprocess.run(
+                ['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active'],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            
+            if result.returncode != 0:
+                return False, None
+                
+            hotspot_name = None
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    name, conn_type = parts[0], parts[1]
+                    if '802-11-wireless' in conn_type or 'wifi' in conn_type.lower():
+                        # Check if it's in AP mode
+                        detail_result = subprocess.run(
+                            ['nmcli', '-t', '-f', '802-11-wireless.mode', 'connection', 'show', name],
+                            capture_output=True,
+                            text=True,
+                            timeout=3
+                        )
+                        if detail_result.returncode == 0 and 'ap' in detail_result.stdout.lower():
+                            hotspot_name = name
+                            break
+            
+            if not hotspot_name:
+                return False, None
+            
+            # Configure connection settings to prevent deactivation during screen lock/suspend
+            settings = [
+                # Prevent power management from deactivating the connection
+                ['connection.autoconnect', 'yes'],
+                # Keep connection active during sleep/suspend
+                ['connection.autoconnect-retries', '0'],  # Infinite retries
+                # Set connection as metered to prevent automatic disconnection
+                ['connection.metered', 'no'],
+                # Ignore carrier for WiFi AP mode
+                ['802-11-wireless.powersave', '2'],  # Disable power save (2 = disable)
+            ]
+            
+            for setting, value in settings:
+                subprocess.run(
+                    ['nmcli', 'connection', 'modify', hotspot_name, setting, value],
+                    capture_output=True,
+                    text=True,
+                    timeout=3
+                )
+            
+            # Reactivate the connection to apply settings
+            subprocess.run(
+                ['nmcli', 'connection', 'up', hotspot_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            return True, hotspot_name
+            
+        except Exception:
+            return False, None
+    
     @staticmethod
     def get_device_status(interface: str) -> Optional[str]:
         if not interface or not interface.strip():

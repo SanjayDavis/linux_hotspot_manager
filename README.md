@@ -2,7 +2,7 @@
 
 A modern, Wayland-compatible GUI application for managing WiFi hotspot functionality on Linux systems equipped with Realtek RTL8852BE wireless chipsets.
 
-##  Features
+## Features
 
 ### Driver Detection & Diagnostics
 - **Automatic driver detection** via kernel logs (`dmesg`)
@@ -22,6 +22,8 @@ A modern, Wayland-compatible GUI application for managing WiFi hotspot functiona
 - **Password management** with auto-generation support
 - **Real-time hotspot status** display
 - **Active connection monitoring**
+- **Integrated lock screen persistence** - built-in UI controls with visual feedback
+- **Automatic sleep blocking** - prevents system suspend while hotspot is active
 
 ### User Experience
 - **Modern libadwaita interface** with GNOME styling
@@ -118,6 +120,33 @@ To remove the application:
 1. Toggle the **Enable Hotspot** switch to OFF
 2. Confirm deactivation via status display
 
+### Lock Screen Persistence
+
+The hotspot manager includes special features to keep your hotspot active even when your screen is locked:
+
+**NetworkManager Configuration:**
+- Automatically disables WiFi power-saving when hotspot is active
+- Prevents automatic disconnection during idle/lock screen
+- Configures connection to persist across sleep/suspend events
+
+**Keep-Alive Service:**
+- A background systemd service monitors hotspot status
+- Automatically prevents system sleep/suspend when hotspot is active
+- Uses systemd-inhibit to block idle sleep
+- Automatically releases inhibitor when hotspot is disabled
+
+**Service Management:**
+```bash
+# Check service status
+systemctl --user status hotspot-keepalive.service
+
+# View service logs
+journalctl --user -u hotspot-keepalive.service -f
+
+# Manually restart service
+systemctl --user restart hotspot-keepalive.service
+```
+
 ### Troubleshooting
 
 **Driver Not Loaded:**
@@ -135,7 +164,7 @@ To remove the application:
 - Check firmware version
 - Update kernel to latest stable version
 
-##  Architecture
+## Architecture
 
 ```
 wifi-hotspot-manager/

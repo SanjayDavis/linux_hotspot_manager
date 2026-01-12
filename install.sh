@@ -95,13 +95,15 @@ cat > "$INSTALL_DIR/wifi-hotspot-manager.desktop" << EOF
 [Desktop Entry]
 Name=WiFi Hotspot Manager
 Comment=Manage WiFi hotspot on RTL8852BE chipsets
-Exec=$SCRIPT_DIR/main.py
+Exec=python3 $SCRIPT_DIR/main.py
 Icon=wifi-hotspot-manager
+Path=$SCRIPT_DIR
 Terminal=false
 Type=Application
 Categories=Network;System;
 Keywords=wifi;hotspot;network;wireless;
 StartupNotify=true
+StartupWMClass=wifi-hotspot-manager
 EOF
 
 # Make desktop file executable
@@ -120,6 +122,37 @@ fi
 echo "Desktop entry installed successfully"
 echo
 
+# Setup hotspot keep-alive service
+echo "Setting up hotspot keep-alive service..."
+chmod +x "$SCRIPT_DIR/hotspot-keepalive.sh"
+
+# Create systemd user service
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+
+cat > "$SYSTEMD_USER_DIR/hotspot-keepalive.service" << EOF
+[Unit]
+Description=WiFi Hotspot Keep-Alive Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$SCRIPT_DIR/hotspot-keepalive.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+# Enable and start the service
+systemctl --user daemon-reload
+systemctl --user enable hotspot-keepalive.service
+systemctl --user start hotspot-keepalive.service
+
+echo "Hotspot keep-alive service installed and started"
+echo
+
 echo
 echo "Installation complete!"
 echo
@@ -130,4 +163,6 @@ echo
 echo "For hotspot management without sudo, add your user to the netdev group:"
 echo "   sudo usermod -a -G netdev \$USER"
 echo "   (Requires logout/login or reboot)"
+echo
+echo "The hotspot will now stay active even when the screen is locked."
 echo
